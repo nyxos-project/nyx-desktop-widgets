@@ -9,8 +9,8 @@ in any language, so adding one never needs a rebuild.
 - Turn widgets on with `nyx plugin enable nyx.clock/large --kind desktop` (or `nyx
   plugin add` and `nyx plugin configure`); they appear top left on every monitor.
 - Arrange them with `nyx-desktop-widgets --edit`: drag to move (they snap to an 8 px
-  grid and keep to the nearest edge), change size and background, remove, or add the
-  ones that are turned on.
+  grid and keep to the nearest edge), change size and background, pin to the current
+  workspace, remove, or add the ones that are turned on.
 - Clicks pass through to the desktop, except on widgets that take them (the media
   player); those can open a popover on click and a menu on right click.
 - Widgets come in compact, medium and large, grow with the suite's text scale, and
@@ -48,7 +48,17 @@ options = { units = "imperial" }     # passed to the plugin for this widget
 every = 5
 ```
 
-A monitor's own entry for a part replaces the `all` one there. Styles go in
+Widgets can belong to one workspace (its id or name), on every monitor or one:
+
+```toml
+[[all.workspace."3".widget]]          # only on workspace 3
+part = "nyx.stats/graphs"
+anchor = "center"
+```
+
+On that workspace it replaces the same part's widget for every workspace; edit mode's
+pin moves a widget between the two. A monitor's own entry for a part replaces the
+`all` one there. Styles go in
 `~/.config/nyx/desktop-widgets.css`.
 
 ## Layout of the repo

@@ -38,9 +38,13 @@ The plan moved here from `nyx/docs/desktop/`. It builds on:
 - `nyx.upnext/card`, in this repo (`plugins/upnext`), from Nyx Calendar's agenda.
 - Hourly weather on the large weather card, from `nyx-weather --json`.
 
-### Not yet
-
-- Phase 2, per-workspace layouts.
+- Phase 2, per-workspace layouts: `[[all.workspace."<n>".widget]]` and
+  `[[monitor."<id>".workspace."<n>".widget]]` (a workspace's id or name). Every
+  workspace's widgets are built once; a switch maps and unmaps them, and plugins hear
+  `visible` per item. A workspace's widget replaces the same part's shared one there.
+  Edit mode's pin moves a widget between every workspace and the active one. A part on
+  several workspaces of one monitor is one view, so its `widgets` entry gives the size
+  of the one showing, again on each switch.
 
 ### Measured
 

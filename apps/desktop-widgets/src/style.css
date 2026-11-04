@@ -75,6 +75,10 @@ levelbar.plugin-progress block.empty {
   color: @theme_text;
 }
 
+.dw-chrome button.on {
+  color: @theme_accent;
+}
+
 .dw-chrome button:hover {
   background-color: mix(@theme_popover, @theme_accent, 0.25);
 }

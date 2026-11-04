@@ -31,6 +31,10 @@ pub struct Tile {
     has_item: Cell<bool>,
     /// Not covered by windows.
     seen: Cell<bool>,
+    /// The workspace it belongs to (none: every one), and whether it shows on the
+    /// monitor's active workspace.
+    workspace: Option<String>,
+    on_workspace: Cell<bool>,
     root: gtk::Overlay,
     card: gtk::Box,
     /// Keeps what the plugin draws to the widget's size.
@@ -39,6 +43,7 @@ pub struct Tile {
     chrome: gtk::Box,
     size_button: gtk::Button,
     bg_button: gtk::Button,
+    ws_button: gtk::Button,
     /// Edit mode's handle for any size, on resizable parts: (min, max) when it is.
     grip: gtk::Box,
     free: Cell<Option<FreeRange>>,
@@ -58,7 +63,7 @@ impl Tile {
     }
 
     fn shown(&self, editing: bool) -> bool {
-        editing || (self.available.get() && self.has_item.get())
+        (editing || (self.available.get() && self.has_item.get())) && self.on_workspace.get()
     }
 }
 
@@ -259,8 +264,14 @@ fn relayout(s: &Rc<Shared>, sc: &Rc<Screen>) {
                 }
             }
         };
-        let existing = sc.tiles.borrow().iter().find(|t| t.plugin == plugin && t.part == part).cloned();
-        let t = existing.unwrap_or_else(|| new_tile(s, sc, &plugin, &part));
+        let workspace = scope.workspace().map(String::from);
+        let existing = sc.tiles.borrow().iter().find(|t| t.plugin == plugin && t.part == part && t.workspace == workspace).cloned();
+        let t = existing.unwrap_or_else(|| new_tile(s, sc, &plugin, &part, workspace.clone()));
+        if workspace.is_some() {
+            t.ws_button.add_css_class("on");
+        } else {
+            t.ws_button.remove_css_class("on");
+        }
         *t.scope.borrow_mut() = scope;
         t.available.set(available);
         t.interactive.set(interactive);
@@ -274,7 +285,16 @@ fn relayout(s: &Rc<Shared>, sc: &Rc<Screen>) {
         if p.background == Background::None {
             t.card.add_css_class("bare");
         }
-        t.bg_button.set_label(if p.background == Background::None { "No background" } else { "Card" });
+        t.bg_button.set_tooltip_text(Some(if p.background == Background::None {
+            "No background: click for a card"
+        } else {
+            "On a card: click for no background"
+        }));
+        if p.background == Background::None {
+            t.bg_button.remove_css_class("on");
+        } else {
+            t.bg_button.add_css_class("on");
+        }
         *t.placement.borrow_mut() = p;
         apply_position(&t);
         refresh_tile(s, sc, &t);
@@ -293,8 +313,54 @@ fn relayout(s: &Rc<Shared>, sc: &Rc<Screen>) {
         }
     }
     *sc.tiles.borrow_mut() = keep;
-    update_mapped(s, sc);
+    apply_workspace(s, sc);
     schedule_input(s, sc);
+}
+
+/// The monitor's active workspace: its id and its name.
+pub fn active_workspace(s: &Shared, sc: &Screen) -> Vec<String> {
+    let desktop = s.desktop.borrow();
+    let Some(m) = desktop.monitor(&sc.connector) else { return vec![] };
+    let mut keys = vec![m.active_workspace.to_string()];
+    if let Some(w) = desktop.workspaces.iter().find(|w| w.id == m.active_workspace) {
+        keys.push(w.name.clone());
+    }
+    keys
+}
+
+/// Show the widgets of the monitor's active workspace (and those for every workspace
+/// it doesn't replace), hide the rest. Nothing is rebuilt: a switch only maps and
+/// unmaps.
+fn apply_workspace(s: &Shared, sc: &Screen) {
+    let keys = active_workspace(s, sc);
+    let active: Vec<&str> = keys.iter().map(String::as_str).collect();
+    let tiles = sc.tiles.borrow();
+    let placements: Vec<(Scope, Placement)> = tiles.iter().map(|t| (t.scope.borrow().clone(), t.placement.borrow().clone())).collect();
+    let shown = layout::shown_on(&placements, &active);
+    let editing = s.editing.get();
+    for (i, t) in tiles.iter().enumerate() {
+        t.on_workspace.set(shown.contains(&i));
+        t.root.set_visible(t.shown(editing));
+        if let Some(w) = active.last() {
+            t.ws_button.set_tooltip_text(Some(&if t.workspace.is_some() {
+                "Only on this workspace: click to show it on every workspace".to_string()
+            } else {
+                format!("On every workspace: click to keep it to workspace {w}")
+            }));
+        }
+    }
+    drop(tiles);
+    update_mapped(s, sc);
+}
+
+/// The active workspace changed on some monitor.
+pub fn workspaces_changed(s: &Rc<Shared>) {
+    for sc in s.screens.borrow().clone() {
+        apply_workspace(s, &sc);
+        schedule_input(s, &sc);
+    }
+    host::send_widgets(s);
+    update_visibility(s);
 }
 
 /// A monitor showing nothing has no surface at all: an empty one costs a redraw for
@@ -366,7 +432,7 @@ fn apply_position(t: &Tile) {
     set(sy, p.offset[1], &|a| r.set_valign(a), &|m| r.set_margin_top(m), &|m| r.set_margin_bottom(m));
 }
 
-fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str) -> Rc<Tile> {
+fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str, workspace: Option<String>) -> Rc<Tile> {
     let root = gtk::Overlay::new();
     root.add_css_class("dw-tile");
     let card = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -401,13 +467,15 @@ fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str) -> Rc<Til
     chrome.set_visible(false);
     let size_button = gtk::Button::with_label("Medium");
     size_button.set_tooltip_text(Some("Size"));
-    let bg_button = gtk::Button::with_label("Card");
+    let bg_button = gtk::Button::from_icon_name("image-x-generic-symbolic");
     bg_button.set_tooltip_text(Some("Background"));
+    let ws_button = gtk::Button::from_icon_name("view-pin-symbolic");
     let remove = gtk::Button::from_icon_name("window-close-symbolic");
     remove.set_tooltip_text(Some("Remove"));
     remove.add_css_class("dw-remove");
     chrome.append(&size_button);
     chrome.append(&bg_button);
+    chrome.append(&ws_button);
     chrome.append(&remove);
     root.add_overlay(&chrome);
 
@@ -432,6 +500,8 @@ fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str) -> Rc<Til
         available: Cell::new(false),
         has_item: Cell::new(false),
         seen: Cell::new(true),
+        workspace,
+        on_workspace: Cell::new(true),
         root: root.clone(),
         card,
         clip,
@@ -439,6 +509,7 @@ fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str) -> Rc<Til
         chrome,
         size_button: size_button.clone(),
         bg_button: bg_button.clone(),
+        ws_button: ws_button.clone(),
         grip: grip.clone(),
         free: Cell::new(None),
         resize_start: Cell::new((0, 0)),
@@ -540,6 +611,16 @@ fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str) -> Rc<Til
         let scope = t.scope.borrow().clone();
         let key = t.key();
         host::edit_layout(&s, |doc| layout::set_background(doc, &scope, &key, next));
+    });
+    let (ws, wsc, wt) = (Rc::downgrade(s), Rc::downgrade(sc), Rc::downgrade(&t));
+    ws_button.connect_clicked(move |_| {
+        let (Some(s), Some(sc), Some(t)) = (ws.upgrade(), wsc.upgrade(), wt.upgrade()) else { return };
+        let from = t.scope.borrow().clone();
+        // Keep it to this workspace by its name (which is its id unless it was named).
+        let keys = active_workspace(&s, &sc);
+        let to = if from.workspace().is_some() { from.with_workspace(None) } else { from.with_workspace(keys.last().map(String::as_str)) };
+        let key = t.key();
+        host::edit_layout(&s, |doc| layout::move_scope(doc, &from, &to, &key));
     });
     let (ws, wt) = (Rc::downgrade(s), Rc::downgrade(&t));
     remove.connect_clicked(move |_| {
@@ -1207,7 +1288,7 @@ pub fn test_gallery(s: &Rc<Shared>) {
 
 fn find(s: &Shared, part: &str, monitor: &str) -> Option<(Rc<Screen>, Rc<Tile>)> {
     let sc = s.screens.borrow().iter().find(|sc| sc.connector == monitor || sc.stable_id == monitor).cloned()?;
-    let t = sc.tiles.borrow().iter().find(|t| t.key() == part).cloned()?;
+    let t = sc.tiles.borrow().iter().find(|t| t.key() == part && t.on_workspace.get()).cloned()?;
     Some((sc, t))
 }
 
@@ -1242,7 +1323,8 @@ pub fn list(s: &Shared) -> serde_json::Value {
                 "monitor": sc.connector,
                 "stable_id": sc.stable_id,
                 "part": t.key(),
-                "scope": match &*t.scope.borrow() { Scope::All => "all".to_string(), Scope::Monitor(m) => m.clone() },
+                "scope": t.scope.borrow().describe(),
+                "on_workspace": t.on_workspace.get(),
                 "anchor": p.anchor.name(),
                 "offset": p.offset,
                 "size": *t.size_name.borrow(),

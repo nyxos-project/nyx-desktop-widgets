@@ -21,6 +21,11 @@
 //!
 //! A monitor's own entry for a part replaces the `all` one there. Entries for monitors
 //! that aren't plugged in stay until they come back.
+//!
+//! Widgets can also belong to one workspace, `[[all.workspace."3".widget]]` or
+//! `[[monitor."DP-1".workspace."3".widget]]` (a workspace's id or name): they show
+//! only while it's the monitor's active one, and on it replace the same part's widget
+//! from the lists for every workspace.
 
 use crate::geometry::Anchor;
 use serde::{Deserialize, Serialize};
@@ -101,6 +106,9 @@ pub fn split_part(part: &str) -> (&str, &str) {
 struct Group {
     #[serde(default)]
     widget: Vec<Placement>,
+    /// Widgets for one workspace, by its id or name.
+    #[serde(default)]
+    workspace: BTreeMap<String, Group>,
 }
 
 /// Which list a placement comes from.
@@ -109,6 +117,58 @@ pub enum Scope {
     All,
     /// A monitor's stable id or connector, as written in the file.
     Monitor(String),
+    /// One workspace, on every monitor.
+    AllWorkspace(String),
+    /// One workspace on one monitor: (monitor, workspace).
+    MonitorWorkspace(String, String),
+}
+
+impl Scope {
+    /// The workspace a placement belongs to; none: every workspace.
+    pub fn workspace(&self) -> Option<&str> {
+        match self {
+            Scope::AllWorkspace(w) | Scope::MonitorWorkspace(_, w) => Some(w),
+            _ => None,
+        }
+    }
+
+    /// The same list, for one workspace or (`None`) for every one.
+    pub fn with_workspace(&self, workspace: Option<&str>) -> Scope {
+        let monitor = match self {
+            Scope::Monitor(m) | Scope::MonitorWorkspace(m, _) => Some(m.clone()),
+            _ => None,
+        };
+        match (monitor, workspace) {
+            (None, None) => Scope::All,
+            (Some(m), None) => Scope::Monitor(m),
+            (None, Some(w)) => Scope::AllWorkspace(w.into()),
+            (Some(m), Some(w)) => Scope::MonitorWorkspace(m, w.into()),
+        }
+    }
+
+    /// As people would say it, for `ListWidgets`.
+    pub fn describe(&self) -> String {
+        match self {
+            Scope::All => "all".into(),
+            Scope::Monitor(m) => m.clone(),
+            Scope::AllWorkspace(w) => format!("all, workspace {w}"),
+            Scope::MonitorWorkspace(m, w) => format!("{m}, workspace {w}"),
+        }
+    }
+}
+
+/// Which placements show while `active` (a workspace's id and name) is the monitor's
+/// workspace: those for every workspace, except where the active one has its own
+/// widget of the same part, and the active one's. Indexes into `placements`.
+pub fn shown_on(placements: &[(Scope, Placement)], active: &[&str]) -> Vec<usize> {
+    let on_active = |s: &Scope| s.workspace().is_some_and(|w| active.contains(&w));
+    let overridden: HashSet<&str> = placements.iter().filter(|(s, _)| on_active(s)).map(|(_, p)| p.part.as_str()).collect();
+    placements
+        .iter()
+        .enumerate()
+        .filter(|(_, (s, p))| if s.workspace().is_none() { !overridden.contains(p.part.as_str()) } else { on_active(s) })
+        .map(|(i, _)| i)
+        .collect()
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
@@ -150,35 +210,49 @@ impl Layout {
         }
     }
 
-    /// What shows on one monitor, each part once.
+    /// What can show on one monitor: each part once for every workspace, then each part
+    /// once per workspace that has its own (see [`shown_on`]).
     pub fn for_monitor(&self, stable_id: &str, connector: &str) -> Vec<(Scope, Placement)> {
         let key = self.monitor_key(stable_id, connector);
-        let mut seen = HashSet::new();
+        let mon = self.monitor.get(&key);
         let mut out = vec![];
-        if let Some(g) = self.monitor.get(&key) {
-            for p in &g.widget {
-                if seen.insert(p.part.clone()) {
-                    out.push((Scope::Monitor(key.clone()), p.clone()));
+        let mut add = |list: [(Option<&Group>, Scope); 2]| {
+            let mut seen = HashSet::new();
+            for (g, scope) in list {
+                for p in g.map(|g| g.widget.as_slice()).unwrap_or_default() {
+                    if seen.insert(p.part.clone()) {
+                        out.push((scope.clone(), p.clone()));
+                    }
                 }
             }
-        }
-        for p in &self.all.widget {
-            if seen.insert(p.part.clone()) {
-                out.push((Scope::All, p.clone()));
-            }
+        };
+        add([(mon, Scope::Monitor(key.clone())), (Some(&self.all), Scope::All)]);
+        let mut workspaces: Vec<&String> = self.all.workspace.keys().chain(mon.map(|m| m.workspace.keys()).into_iter().flatten()).collect();
+        workspaces.sort();
+        workspaces.dedup();
+        for w in workspaces {
+            add([
+                (mon.and_then(|m| m.workspace.get(w)), Scope::MonitorWorkspace(key.clone(), w.clone())),
+                (self.all.workspace.get(w), Scope::AllWorkspace(w.clone())),
+            ]);
         }
         out
     }
 
     /// Every plugin with a widget anywhere, monitors that aren't plugged in included.
     pub fn plugins_placed(&self) -> Vec<String> {
-        let mut out: Vec<String> = self
-            .all
-            .widget
-            .iter()
-            .chain(self.monitor.values().flat_map(|g| g.widget.iter()))
-            .map(|p| p.split().0.to_string())
-            .collect();
+        fn walk<'a>(g: &'a Group, out: &mut Vec<&'a Placement>) {
+            out.extend(g.widget.iter());
+            for w in g.workspace.values() {
+                walk(w, out);
+            }
+        }
+        let mut all = vec![];
+        walk(&self.all, &mut all);
+        for g in self.monitor.values() {
+            walk(g, &mut all);
+        }
+        let mut out: Vec<String> = all.into_iter().map(|p| p.split().0.to_string()).collect();
         out.sort();
         out.dedup();
         out
@@ -212,7 +286,19 @@ fn group_mut<'a>(doc: &'a mut DocumentMut, scope: &Scope, create: bool) -> Optio
     if create && !doc.contains_key("version") {
         doc.insert("version", value(1));
     }
-    let parent: &mut Table = match scope {
+    fn child<'a>(t: &'a mut Table, key: &str, create: bool) -> Option<&'a mut Table> {
+        if !t.contains_table(key) {
+            if !create {
+                return None;
+            }
+            let mut n = Table::new();
+            n.set_implicit(true);
+            t.insert(key, Item::Table(n));
+        }
+        t[key].as_table_mut()
+    }
+    let base = scope.with_workspace(None);
+    let parent: &mut Table = match &base {
         Scope::All => {
             if !doc.contains_table("all") {
                 if !create {
@@ -242,6 +328,11 @@ fn group_mut<'a>(doc: &'a mut DocumentMut, scope: &Scope, create: bool) -> Optio
             }
             monitors[key.as_str()].as_table_mut()?
         }
+        _ => unreachable!("with_workspace(None) is All or Monitor"),
+    };
+    let parent = match scope.workspace() {
+        Some(w) => child(child(parent, "workspace", create)?, w, create)?,
+        None => parent,
     };
     if !parent.get("widget").is_some_and(|w| w.is_array_of_tables()) {
         if !create {
@@ -303,6 +394,19 @@ pub fn remove(doc: &mut DocumentMut, scope: &Scope, part: &str) -> bool {
     let before = g.len();
     g.retain(|t| t.get("part").and_then(|p| p.as_str()) != Some(part));
     g.len() != before
+}
+
+/// Move a widget to another list (every workspace, or one), keeping all its settings;
+/// one already there for the same part is replaced.
+pub fn move_scope(doc: &mut DocumentMut, from: &Scope, to: &Scope, part: &str) -> bool {
+    if from == to {
+        return false;
+    }
+    let Some(entry) = entry_mut(doc, from, part).map(|t| t.clone()) else { return false };
+    remove(doc, from, part);
+    remove(doc, to, part);
+    group_mut(doc, to, true).expect("created").push(entry);
+    true
 }
 
 /// Add a widget, or move it if the scope has it already.
@@ -425,6 +529,67 @@ memory = "64M"
         assert_eq!(other[0].1.size.as_deref(), Some("compact"));
         let lg = l.for_monitor("LG Electronics|27GN950|012345", "DP-1");
         assert_eq!(lg.iter().find(|(_, p)| p.part == "nyx.weather/card").unwrap().1.background, Background::Card);
+    }
+
+    #[test]
+    fn workspaces() {
+        let text = r#"
+[[all.widget]]
+part = "nyx.clock/large"
+anchor = "top-left"
+
+[[all.widget]]
+part = "nyx.stats/graphs"
+
+[[all.workspace."2".widget]]
+part = "nyx.clock/large"
+anchor = "center"
+
+[[monitor."DP-1".workspace."2".widget]]
+part = "nyx.media/player"
+
+[[all.workspace.code.widget]]
+part = "nyx.upnext/card"
+"#;
+        let l = Layout::parse(text).unwrap();
+        let ps = l.for_monitor("DP-1", "DP-1");
+        let parts = |idx: Vec<usize>| -> Vec<String> {
+            let mut v: Vec<String> = idx.into_iter().map(|i| format!("{}@{}", ps[i].1.part, ps[i].0.workspace().unwrap_or("*"))).collect();
+            v.sort();
+            v
+        };
+        // Workspace 1: only the widgets for every workspace.
+        assert_eq!(parts(shown_on(&ps, &["1", "1"])), vec!["nyx.clock/large@*", "nyx.stats/graphs@*"]);
+        // Workspace 2: its own clock replaces the shared one; its media player joins.
+        assert_eq!(parts(shown_on(&ps, &["2", "2"])), vec!["nyx.clock/large@2", "nyx.media/player@2", "nyx.stats/graphs@*"]);
+        // A workspace named "code" (id 7).
+        assert_eq!(parts(shown_on(&ps, &["7", "code"])), vec!["nyx.clock/large@*", "nyx.stats/graphs@*", "nyx.upnext/card@code"]);
+        // Another monitor doesn't get DP-1's media player.
+        let other = l.for_monitor("DP-2", "DP-2");
+        assert!(!other.iter().any(|(_, p)| p.part == "nyx.media/player"));
+        assert!(l.plugins_placed().contains(&"nyx.upnext".to_string()));
+    }
+
+    #[test]
+    fn moves_between_workspaces() {
+        let mut doc: DocumentMut = "# mine\n[[all.widget]]\npart = \"nyx.clock/large\"\nsize = \"large\"\n".parse().unwrap();
+        let ws = Scope::All.with_workspace(Some("3"));
+        assert_eq!(ws, Scope::AllWorkspace("3".into()));
+        assert!(move_scope(&mut doc, &Scope::All, &ws, "nyx.clock/large"));
+        let text = doc.to_string();
+        assert!(text.contains("# mine") && text.contains("[[all.workspace.3.widget]]"), "{text}");
+        let l = Layout::parse(&text).unwrap();
+        let ps = l.for_monitor("x", "x");
+        assert_eq!(ps.len(), 1);
+        assert_eq!((ps[0].0.clone(), ps[0].1.size.as_deref()), (ws.clone(), Some("large")));
+        assert!(set_position(&mut doc, &ws, "nyx.clock/large", Anchor::Bottom, [0, 24]));
+        assert!(move_scope(&mut doc, &ws, &Scope::All, "nyx.clock/large"));
+        let l = Layout::parse(&doc.to_string()).unwrap();
+        assert_eq!(l.for_monitor("x", "x")[0].1.anchor, Anchor::Bottom);
+        let mon = Scope::MonitorWorkspace("DP-1".into(), "2".into());
+        assert_eq!(mon.with_workspace(None), Scope::Monitor("DP-1".into()));
+        assert!(move_scope(&mut doc, &Scope::All, &mon, "nyx.clock/large"));
+        assert!(doc.to_string().contains("[[monitor.DP-1.workspace.2.widget]]"), "{doc}");
     }
 
     #[test]

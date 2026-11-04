@@ -140,7 +140,9 @@ pub fn start(app: &gtk::Application, only: Option<String>, edit: bool) {
             broadcast(&s, |_| Some(HostMsg::Monitors { monitors: monitors.clone() }));
             schedule_sync(&s);
         }
-        if u.changes.windows || u.changes.workspaces || u.changes.active || u.changes.monitors {
+        if u.changes.workspaces || u.changes.active || u.changes.monitors {
+            screens::workspaces_changed(&s);
+        } else if u.changes.windows {
             screens::update_visibility(&s);
         }
         if u.changes.workspaces || u.changes.active || u.changes.focus || u.changes.titles || u.changes.windows {
@@ -467,12 +469,23 @@ fn widgets_for(s: &Shared, manifest: &Manifest, parts: &[String]) -> Vec<Widget>
     let layout = s.layout.borrow();
     let mut out = vec![];
     for screen in s.screens.borrow().iter() {
-        for (_, p) in layout.for_monitor(&screen.stable_id, &screen.connector) {
+        // A part placed for several workspaces is one view on the monitor: say the size
+        // of the one showing (else the first).
+        let placements = layout.for_monitor(&screen.stable_id, &screen.connector);
+        let keys = screens::active_workspace(s, screen);
+        let active: Vec<&str> = keys.iter().map(String::as_str).collect();
+        let shown = nyx_desktop_widgets_core::layout::shown_on(&placements, &active);
+        let mut done = HashSet::new();
+        let order = shown.iter().copied().chain(0..placements.len());
+        for p in order.map(|i| &placements[i].1) {
+            if !done.insert(p.part.clone()) {
+                continue;
+            }
             let (plugin, part) = split_part(&p.part);
             if plugin != manifest.id || !parts.iter().any(|x| x == part) {
                 continue;
             }
-            let (size, (width, height)) = resolve_size(manifest, part, &p);
+            let (size, (width, height)) = resolve_size(manifest, part, p);
             let options = serde_json::to_value(&p.options).unwrap_or_default();
             let options = if options.as_object().is_some_and(|o| o.is_empty()) { serde_json::Value::Null } else { options };
             out.push(Widget { item: part.to_string(), monitor: screen.connector.clone(), size, width, height, options });
