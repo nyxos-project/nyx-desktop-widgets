@@ -2,7 +2,8 @@
 
 For the session working on `nyx-packages` and `nyxos`. Nyx Desktop Widgets is pushed
 at `nyxos-project/nyx-desktop-widgets`; its build was tested on Arch, not yet under
-Nix. It needs nyx-bar at a6d951d or later, whose first-party plugins carry the
+Nix. Its plugin crates come from nyx-core (e478d83) and nyx-design (aec4b03) as git
+dependencies. It needs nyx-bar at a6d951d or later, whose first-party plugins carry the
 desktop parts (clock, weather, stats, media), and Nyx Weather at cb463ed or later for
 the hourly forecast (older ones show current conditions only). Up next
 (`nyx.upnext`) ships in this package.

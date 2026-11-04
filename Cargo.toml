@@ -12,14 +12,14 @@ repository = "https://github.com/nyxos-project/nyx-desktop-widgets"
 async-channel = "2"
 gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }
 gtk4-layer-shell = "0.8"
-nyx-desktop = { git = "https://github.com/design-nexus/nyx-core.git", rev = "394ddf8193797cd1f420fac98b097d04fa75f0e2" }
-nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "976fed940841a2a505ffe644f632cb60e12988a8" }
-# The plugin system lives in nyx-bar until it moves to nyx-core and nyx-design.
-nyx-plugin = { git = "https://github.com/design-nexus/nyx-bar.git", rev = "cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4" }
-nyx-plugin-host = { git = "https://github.com/design-nexus/nyx-bar.git", rev = "cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4" }
-nyx-plugin-sdk = { git = "https://github.com/design-nexus/nyx-bar.git", rev = "cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4" }
-nyx-plugin-protocol = { git = "https://github.com/design-nexus/nyx-bar.git", rev = "cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4" }
-nyx-plugin-view = { git = "https://github.com/design-nexus/nyx-bar.git", rev = "cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4" }
+nyx-desktop = { git = "https://github.com/design-nexus/nyx-core.git", rev = "e478d834d7d3c482cba6af4a3fd1c60f7390ae89" }
+nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "aec4b032c92157cbcdc386aa97730f432300d5c4" }
+# The plugin system: nyx-core, and its GTK drawing in nyx-design.
+nyx-plugin = { git = "https://github.com/design-nexus/nyx-core.git", rev = "e478d834d7d3c482cba6af4a3fd1c60f7390ae89" }
+nyx-plugin-host = { git = "https://github.com/design-nexus/nyx-core.git", rev = "e478d834d7d3c482cba6af4a3fd1c60f7390ae89" }
+nyx-plugin-sdk = { git = "https://github.com/design-nexus/nyx-core.git", rev = "e478d834d7d3c482cba6af4a3fd1c60f7390ae89" }
+nyx-plugin-protocol = { git = "https://github.com/design-nexus/nyx-core.git", rev = "e478d834d7d3c482cba6af4a3fd1c60f7390ae89" }
+nyx-plugin-view = { git = "https://github.com/design-nexus/nyx-design.git", rev = "aec4b032c92157cbcdc386aa97730f432300d5c4" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1"
