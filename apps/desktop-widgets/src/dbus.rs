@@ -26,6 +26,10 @@ const XML: &str = r#"<node>
     <method name="Reload"/>
     <method name="RestartPlugin"><arg type="s" name="id" direction="in"/><arg type="b" name="found" direction="out"/></method>
     <method name="TestGallery"/>
+    <method name="TestClick">
+      <arg type="s" name="part" direction="in"/><arg type="s" name="monitor" direction="in"/><arg type="u" name="button" direction="in"/>
+      <arg type="b" name="found" direction="out"/>
+    </method>
   </interface>
 </node>"#;
 
@@ -89,12 +93,17 @@ pub fn serve(conn: &gio::DBusConnection, s: &Rc<Shared>) -> Result<Registration,
                     let found = host::restart(&s, &id);
                     invocation.return_value(Some(&(found,).to_variant()));
                 }
-                "TestGallery" if std::env::var_os("NYX_DW_DEBUG").is_none() => {
+                "TestGallery" | "TestClick" if std::env::var_os("NYX_DW_DEBUG").is_none() => {
                     invocation.return_dbus_error("org.freedesktop.DBus.Error.AccessDenied", "test methods need NYX_DW_DEBUG")
                 }
                 "TestGallery" => {
                     crate::screens::test_gallery(&s);
                     invocation.return_value(None);
+                }
+                "TestClick" => {
+                    let (part, monitor, button) = params.get::<(String, String, u32)>().unwrap_or_default();
+                    let found = crate::screens::test_click(&s, &part, &monitor, button);
+                    invocation.return_value(Some(&(found,).to_variant()));
                 }
                 _ => invocation.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", method),
             }

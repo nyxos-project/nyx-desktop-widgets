@@ -1,0 +1,17 @@
+[package]
+name = "nyx-desktop-upnext"
+version = "0.1.0"
+description = "Up next: the coming events from Nyx Calendar, as a desktop widget"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nyx-desktop-upnext"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+nyx-plugin-sdk.workspace = true
+rusqlite = { version = "0.40", features = ["bundled"] }

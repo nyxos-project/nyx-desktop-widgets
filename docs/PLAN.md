@@ -23,13 +23,23 @@ The plan moved here from `nyx/docs/desktop/`. It builds on:
 - A monitor whose widgets are all hidden has no surface at all (an empty one is
   configured by Hyprland on every frame).
 
+### Added after version 1
+
+- Free sizes: a part with `resizable = true` (and `min`, `max`) gets a grip in edit
+  mode; `size = "free"` with `width` and `height` in the layout. The stats graphs are
+  resizable.
+- Popovers on click and menus on right click, on interactive widgets, as in the bar.
+- Pausing while the session is locked, from logind's `LockedHint` (untested here:
+  it needs the locker to set the hint).
+- The suite's text scale: named sizes grow with it, and plugins' `font_size` follows
+  it in every host.
+- **Add widget** draws live previews: while the list is open, the plugins of the parts
+  in it run with a widget on monitor `preview`.
+- `nyx.upnext/card`, in this repo (`plugins/upnext`), from Nyx Calendar's agenda.
+- Hourly weather on the large weather card, from `nyx-weather --json`.
+
 ### Not yet
 
-- `resizable` parts with free sizes; widgets are `compact`, `medium` or `large`.
-- Popovers and menus on widgets (clicks reach the plugin as events).
-- Pausing while the session is locked; the suite's text scale.
-- Live previews in **Add widget**; `nyx.upnext/card`; hourly weather (Nyx Weather's
-  summary has none).
 - Phase 2, per-workspace layouts.
 
 ### Measured

@@ -12,9 +12,12 @@ in any language, so adding one never needs a rebuild.
   grid and keep to the nearest edge), change size and background, remove, or add the
   ones that are turned on.
 - Clicks pass through to the desktop, except on widgets that take them (the media
-  player).
-- Widgets under windows or a fullscreen app are paused: their plugins hear they can't
-  be seen.
+  player); those can open a popover on click and a menu on right click.
+- Widgets come in compact, medium and large, grow with the suite's text scale, and
+  some (the system graphs) can be dragged to any size.
+- **Add widget** shows each widget live before it's placed.
+- Widgets under windows or a fullscreen app, or on a locked screen, are paused: their
+  plugins hear they can't be seen.
 - Third-party widgets run sandboxed, with the same permissions and limits as in the
   bar.
 
@@ -32,7 +35,8 @@ version = 1
 part = "nyx.clock/large"
 anchor = "top-left"                  # nine anchors: top-left, top, top-right, left, center, …
 offset = [48, 48]                    # logical px from the anchor
-size = "large"                       # compact, medium or large, as the part allows
+size = "large"                       # compact, medium or large, as the part allows,
+                                     # or "free" with width and height (resizable parts)
 background = "none"                  # or "card" (the default)
 
 [[monitor."LG Electronics|27GN950|012345".widget]]   # one monitor (or "DP-1")
@@ -53,6 +57,7 @@ A monitor's own entry for a part replaces the `all` one there. Styles go in
 | --- | --- |
 | `crates/nyx-desktop-widgets-core` | The layout file and the placement maths, without GTK |
 | `apps/desktop-widgets` | The host |
+| `plugins/upnext` | Up next: the coming events from Nyx Calendar |
 | `data/nyx-desktop-widgets.service` | The user unit |
 | `nix/` | The NyxOS package and how to wire it up |
 | `docs/PLAN.md` | The plan, what's built and what isn't |

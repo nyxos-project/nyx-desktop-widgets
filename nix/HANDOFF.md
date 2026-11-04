@@ -2,8 +2,10 @@
 
 For the session working on `nyx-packages` and `nyxos`. Nyx Desktop Widgets is pushed
 at `nyxos-project/nyx-desktop-widgets`; its build was tested on Arch, not yet under
-Nix. It needs nyx-bar at 34b7c0c or later, whose first-party plugins carry the
-desktop parts (clock, weather, stats, media).
+Nix. It needs nyx-bar at a6d951d or later, whose first-party plugins carry the
+desktop parts (clock, weather, stats, media), and Nyx Weather at cb463ed or later for
+the hourly forecast (older ones show current conditions only). Up next
+(`nyx.upnext`) ships in this package.
 
 ## nyx-packages
 
@@ -11,7 +13,7 @@ desktop parts (clock, weather, stats, media).
 2. Copy [nyx-desktop-widgets.nix](nyx-desktop-widgets.nix) to
    `pkgs/nyx-desktop-widgets.nix` and add `"nyx-desktop-widgets"` to the `fromSource`
    list in `pkgs/default.nix`.
-3. Bump the nyx-bar input to 34b7c0c or later: its plugins folder has the desktop
+3. Bump the nyx-bar input to a6d951d or later: its plugins folder has the desktop
    scripts (`clock-desktop.sh`, `weather-desktop.sh`), which `nyx-bar.nix` already
    installs with the other `*.sh` files.
 4. `modules/nixos/default.nix`: add `desktopWidgets = "Nyx Desktop Widgets";` to

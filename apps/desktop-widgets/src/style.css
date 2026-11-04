@@ -114,3 +114,15 @@ popover.dw-popover > contents {
 .dw-gallery-row label {
   font-weight: normal;
 }
+
+/* Edit mode's resize handle, on parts that can be any size. */
+.dw-grip {
+  margin: 4px;
+  border-radius: 0 0 11px 0;
+  border-right: 3px solid alpha(@theme_accent, 0.8);
+  border-bottom: 3px solid alpha(@theme_accent, 0.8);
+}
+
+.dw-gallery .nyx-widget {
+  box-shadow: none;
+}

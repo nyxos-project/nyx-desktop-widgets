@@ -12,8 +12,8 @@ use nyx_desktop_widgets_core::{Layout, Placement, layout::split_part};
 use nyx_plugin::{Kind, Manifest, Plugin, State, discovery, manifest::desktop_size, paths};
 use nyx_plugin_host::{self as host, Handle, Report, Spec, frames::Buffers, limits::Limits};
 use nyx_plugin_protocol::{
-    API_VERSION, DesktopMonitor, DesktopState, DesktopWorkspace, Event, EventKind, Hello, HostMsg, Item, MonitorInfo, PluginMsg,
-    ThemeInfo, Widget,
+    API_VERSION, DesktopMonitor, DesktopState, DesktopWorkspace, Event, EventKind, Hello, HostMsg, Item, MenuEntry, MonitorInfo,
+    Node, PluginMsg, ThemeInfo, Widget,
 };
 use nyx_plugin_view as view;
 use std::cell::{Cell, RefCell};
@@ -38,6 +38,9 @@ pub struct Running {
     limits: Limits,
     /// Items in the order they first came.
     pub items: Vec<Item>,
+    /// What a click (popover) and a right click (menu) open, by (item, monitor).
+    pub popovers: HashMap<(String, Option<String>), Node>,
+    pub menus: HashMap<(String, Option<String>), Vec<MenuEntry>>,
     pub frames: HashMap<(String, String), Buffers>,
     pub state: RunState,
     generation: u64,
@@ -56,6 +59,10 @@ pub struct Shared {
     pub plugins: RefCell<BTreeMap<String, Running>>,
     pub screens: RefCell<Vec<Rc<screens::Screen>>>,
     pub editing: Cell<bool>,
+    /// Parts shown in the open **Add widget** list: their plugins run for the previews.
+    pub previews: RefCell<Vec<(String, String)>>,
+    /// The session is locked (logind's LockedHint): nothing can be seen.
+    pub locked: Cell<bool>,
     css: RefCell<HashMap<String, gtk::CssProvider>>,
     user_css: gtk::CssProvider,
     generation: Cell<u64>,
@@ -104,6 +111,8 @@ pub fn start(app: &gtk::Application, only: Option<String>, edit: bool) {
         plugins: RefCell::default(),
         screens: RefCell::default(),
         editing: Cell::new(false),
+        previews: RefCell::default(),
+        locked: Cell::new(false),
         css: RefCell::default(),
         user_css: gtk::CssProvider::new(),
         generation: Cell::new(0),
@@ -160,6 +169,8 @@ pub fn start(app: &gtk::Application, only: Option<String>, edit: bool) {
             let theme = theme_info();
             broadcast(&s, |_| Some(HostMsg::Theme { theme: theme.clone() }));
             screens::rerender_all(&s);
+            // The text scale sizes widgets.
+            screens::relayout_all(&s);
         }
     });
 
@@ -179,6 +190,7 @@ pub fn start(app: &gtk::Application, only: Option<String>, edit: bool) {
             );
         }
     }
+    watch_lock(&s);
     sync_plugins(&s);
     if edit {
         let ws = Rc::downgrade(&s);
@@ -190,6 +202,41 @@ pub fn start(app: &gtk::Application, only: Option<String>, edit: bool) {
     }
     // Everything else holds this weakly; it lives as long as the app.
     std::mem::forget(s);
+}
+
+/// Follow logind's LockedHint for this session: a locked screen shows no widgets.
+fn watch_lock(s: &Rc<Shared>) {
+    let ws = Rc::downgrade(s);
+    gio::DBusProxy::for_bus(
+        gio::BusType::System,
+        gio::DBusProxyFlags::DO_NOT_AUTO_START,
+        None,
+        "org.freedesktop.login1",
+        "/org/freedesktop/login1/session/auto",
+        "org.freedesktop.login1.Session",
+        gio::Cancellable::NONE,
+        move |res| {
+            let Ok(proxy) = res else { return };
+            let read = |p: &gio::DBusProxy| p.cached_property("LockedHint").and_then(|v| v.get::<bool>()).unwrap_or(false);
+            if let Some(s) = ws.upgrade() {
+                s.locked.set(read(&proxy));
+            }
+            let ws2 = ws.clone();
+            proxy.connect_local("g-properties-changed", false, move |args| {
+                let (Some(s), Some(p)) = (ws2.upgrade(), args.first().and_then(|a| a.get::<gio::DBusProxy>().ok())) else {
+                    return None;
+                };
+                let locked = read(&p);
+                if s.locked.replace(locked) != locked {
+                    debug(|| format!("session {}", if locked { "locked" } else { "unlocked" }));
+                    screens::update_visibility(&s);
+                }
+                None
+            });
+            // Kept for as long as the app runs.
+            std::mem::forget(proxy);
+        },
+    );
 }
 
 pub fn set_editing(on: bool) {
@@ -388,19 +435,32 @@ fn broadcast(s: &Shared, msg: impl Fn(&Running) -> Option<HostMsg>) {
     }
 }
 
-/// The size a placement shows at: the one it names if the part offers it, else the
-/// part's first.
+/// The size a placement shows at: its free size if the part is resizable, else the
+/// size it names if the part offers it, else the part's first, grown with the suite's
+/// text scale.
 pub fn resolve_size(manifest: &Manifest, part: &str, p: &Placement) -> (String, (i32, i32)) {
-    let sizes = manifest.parts(Kind::Desktop).into_iter().find(|x| x.id == part).map(|x| x.sizes()).unwrap_or_default();
+    let found = manifest.parts(Kind::Desktop).into_iter().find(|x| x.id == part);
+    if let Some(pt) = found.as_ref().filter(|pt| pt.resizable())
+        && p.size.as_deref() == Some("free")
+        && let (Some(w), Some(h)) = (p.width, p.height)
+    {
+        let (min, max) = pt.free_range();
+        return ("free".into(), (w.clamp(min.0, max.0), h.clamp(min.1, max.1)));
+    }
+    let sizes: Vec<String> = found.map(|x| x.sizes()).unwrap_or_default().into_iter().filter(|s| s != "free").collect();
     let name = p
         .size
         .clone()
         .filter(|n| sizes.contains(n))
         .or_else(|| sizes.first().cloned())
         .unwrap_or_else(|| "medium".into());
-    let px = desktop_size(&name).unwrap_or((336, 160));
-    (name, px)
+    let (w, h) = desktop_size(&name).unwrap_or((336, 160));
+    let k = view::text_scale();
+    (name, ((w as f64 * k).round() as i32, (h as f64 * k).round() as i32))
 }
+
+/// Where previews in the **Add widget** list are drawn, as a monitor name.
+pub const PREVIEW: &str = "preview";
 
 /// The widgets placed from one plugin on the monitors shown.
 fn widgets_for(s: &Shared, manifest: &Manifest, parts: &[String]) -> Vec<Widget> {
@@ -418,18 +478,29 @@ fn widgets_for(s: &Shared, manifest: &Manifest, parts: &[String]) -> Vec<Widget>
             out.push(Widget { item: part.to_string(), monitor: screen.connector.clone(), size, width, height, options });
         }
     }
+    drop(layout);
+    for (plugin, part) in s.previews.borrow().iter() {
+        if *plugin != manifest.id || !parts.contains(part) {
+            continue;
+        }
+        let (size, (width, height)) = resolve_size(manifest, part, &Placement::new(plugin));
+        out.push(Widget { item: part.clone(), monitor: PREVIEW.into(), size, width, height, options: serde_json::Value::Null });
+    }
     out
 }
 
 /// Plugins with a widget on a monitor that's shown.
 fn placed_plugins(s: &Shared) -> HashSet<String> {
     let layout = s.layout.borrow();
-    s.screens
+    let mut placed: HashSet<String> = s
+        .screens
         .borrow()
         .iter()
         .flat_map(|sc| layout.for_monitor(&sc.stable_id, &sc.connector))
         .map(|(_, p)| split_part(&p.part).0.to_string())
-        .collect()
+        .collect();
+    placed.extend(s.previews.borrow().iter().map(|(p, _)| p.clone()));
+    placed
 }
 
 /// Start, restart and stop plugins to match the folders, `plugins.toml` and the layout.
@@ -573,6 +644,8 @@ fn spawn_plugin(s: &Rc<Shared>, p: Plugin, parts: Vec<String>, settings: serde_j
             settings,
             limits,
             items: vec![],
+            popovers: HashMap::new(),
+            menus: HashMap::new(),
             frames: HashMap::new(),
             state: RunState::Starting,
             generation,
@@ -703,6 +776,13 @@ fn on_message(s: &Rc<Shared>, id: &str, msg: PluginMsg) {
                     }
                     item.view = Some(v);
                 }
+                for (k, node) in r.popovers.iter_mut() {
+                    if k.0 == p.item {
+                        for n in &p.nodes {
+                            node.apply_patch(&n.id, &n.set);
+                        }
+                    }
+                }
             }
             screens::patch(s, id, &p);
         }
@@ -718,8 +798,26 @@ fn on_message(s: &Rc<Shared>, id: &str, msg: PluginMsg) {
             let Some(map) = b.maps.get(buffer as usize) else { return };
             screens::show_frame(s, id, &item, &node, map.bytes(), b.width, b.height, b.stride);
         }
-        // Widgets have no popovers or menus yet; clicks reach the plugin as events.
-        PluginMsg::Menu(_) | PluginMsg::Popover(_) | PluginMsg::FrameRequest { .. } => {}
+        PluginMsg::Popover(p) => {
+            let key = (p.item.clone(), p.monitor.clone());
+            if let Some(r) = s.plugins.borrow_mut().get_mut(id) {
+                match p.view {
+                    Some(v) => {
+                        r.popovers.insert(key, v);
+                    }
+                    None => {
+                        r.popovers.remove(&key);
+                    }
+                }
+            }
+            screens::refresh_popover(s, id, &p.item);
+        }
+        PluginMsg::Menu(m) => {
+            if let Some(r) = s.plugins.borrow_mut().get_mut(id) {
+                r.menus.insert((m.item, m.monitor), m.entries);
+            }
+        }
+        PluginMsg::FrameRequest { .. } => {}
     }
 }
 

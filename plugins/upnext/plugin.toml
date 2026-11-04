@@ -1,0 +1,23 @@
+id = "nyx.upnext"
+name = "Up next"
+version = "0.1.0"
+author = "Design Nexus"
+license = "MIT"
+description = "The coming events from Nyx Calendar. Hidden until Calendar has run."
+api_version = 1
+kinds = ["desktop"]
+exec = ["nyx-desktop-upnext"]
+
+[permissions]
+# Documentation for this trusted plugin; a third-party copy would need this.
+read = ["~/.local/share/nyx-calendar"]
+
+[desktop]
+mode = "stream"
+
+[[desktop.items]]
+id = "card"
+name = "Up next"
+description = "Today's and the coming days' events, with their calendar colours."
+sizes = ["large", "medium"]
+default = true

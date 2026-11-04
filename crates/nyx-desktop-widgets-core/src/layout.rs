@@ -59,9 +59,14 @@ pub struct Placement {
     pub anchor: Anchor,
     #[serde(default = "default_offset")]
     pub offset: [i32; 2],
-    /// A size name; none: the part's default.
+    /// A size name, or `free` with `width` and `height`; none: the part's default.
     #[serde(default)]
     pub size: Option<String>,
+    /// For `size = "free"` (resizable parts), logical pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<i32>,
     #[serde(default)]
     pub background: Background,
     #[serde(default)]
@@ -75,6 +80,8 @@ impl Placement {
             anchor: Anchor::TopLeft,
             offset: default_offset(),
             size: None,
+            width: None,
+            height: None,
             background: Background::Card,
             options: toml::Table::new(),
         }
@@ -267,6 +274,17 @@ pub fn set_position(doc: &mut DocumentMut, scope: &Scope, part: &str, anchor: An
 pub fn set_size(doc: &mut DocumentMut, scope: &Scope, part: &str, size: &str) -> bool {
     let Some(t) = entry_mut(doc, scope, part) else { return false };
     t.insert("size", value(size));
+    t.remove("width");
+    t.remove("height");
+    true
+}
+
+/// Any size, for resizable parts.
+pub fn set_free_size(doc: &mut DocumentMut, scope: &Scope, part: &str, width: i32, height: i32) -> bool {
+    let Some(t) = entry_mut(doc, scope, part) else { return false };
+    t.insert("size", value("free"));
+    t.insert("width", value(width as i64));
+    t.insert("height", value(height as i64));
     true
 }
 
@@ -429,6 +447,11 @@ memory = "64M"
         assert_eq!(doc.to_string().matches("nyx.stats/graphs").count(), 1);
         assert!(remove(&mut doc, &mon, "nyx.stats/graphs"));
         assert!(!remove(&mut doc, &mon, "nyx.stats/graphs"));
+        assert!(set_free_size(&mut doc, &Scope::All, "nyx.clock/large", 400, 216));
+        let free = &Layout::parse(&doc.to_string()).unwrap().for_monitor("x", "x")[0].1;
+        assert_eq!((free.size.as_deref(), free.width, free.height), (Some("free"), Some(400), Some(216)));
+        assert!(set_size(&mut doc, &Scope::All, "nyx.clock/large", "large"));
+        assert!(!doc.to_string().contains("width"), "a named size drops the free one");
         assert_eq!(Layout::parse(&doc.to_string()).unwrap().for_monitor("HEADLESS-3", "HEADLESS-3").len(), 1);
     }
 }

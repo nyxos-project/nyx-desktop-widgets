@@ -10,7 +10,7 @@ use nyx_desktop_widgets_core::geometry::{self, Rect, Side};
 use nyx_desktop_widgets_core::layout::{self, split_part};
 use nyx_desktop_widgets_core::{Anchor, Background, Placement, Scope};
 use nyx_plugin::{Kind, State, discovery};
-use nyx_plugin_protocol::{EventKind, Item, Patch};
+use nyx_plugin_protocol::{EventKind, Item, MenuEntry, Patch};
 use nyx_plugin_view::{self as view, Rendered, ViewEvent};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -39,6 +39,12 @@ pub struct Tile {
     chrome: gtk::Box,
     size_button: gtk::Button,
     bg_button: gtk::Button,
+    /// Edit mode's handle for any size, on resizable parts: (min, max) when it is.
+    grip: gtk::Box,
+    free: Cell<Option<FreeRange>>,
+    resize_start: Cell<(i32, i32)>,
+    popover: RefCell<Option<(gtk::Popover, Rc<Rendered>)>>,
+    menu: RefCell<Option<gtk::PopoverMenu>>,
     rendered: RefCell<Option<Rc<Rendered>>>,
     last: RefCell<Option<Item>>,
     /// Which stand-in it shows when the plugin has nothing for it.
@@ -58,6 +64,9 @@ impl Tile {
 
 /// x, y, width, height.
 type Region = (i32, i32, i32, i32);
+
+/// A resizable part's smallest and largest size.
+type FreeRange = ((i32, i32), (i32, i32));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StandIn {
@@ -230,18 +239,23 @@ fn relayout(s: &Rc<Shared>, sc: &Rc<Screen>) {
     for (scope, p) in placements {
         let (plugin, part) = split_part(&p.part);
         let (plugin, part) = (plugin.to_string(), part.to_string());
-        let (available, size_name, size, interactive) = {
+        let (available, size_name, size, interactive, free) = {
             let plugins = s.plugins.borrow();
             match plugins.get(&plugin).filter(|r| r.parts.contains(&part)) {
                 Some(r) => {
                     let (name, px) = host::resolve_size(&r.plugin.manifest, &part, &p);
-                    let interactive = r.plugin.manifest.parts(Kind::Desktop).iter().any(|x| x.id == part && x.interactive());
-                    (true, name, px, interactive)
+                    let found = r.plugin.manifest.parts(Kind::Desktop).into_iter().find(|x| x.id == part);
+                    let interactive = found.as_ref().is_some_and(|x| x.interactive());
+                    let free = found.filter(|x| x.resizable()).map(|x| x.free_range());
+                    (true, name, px, interactive, free)
                 }
                 None => {
                     let name = p.size.clone().unwrap_or_else(|| "medium".into());
-                    let px = nyx_plugin::manifest::desktop_size(&name).unwrap_or((336, 160));
-                    (false, name, px, false)
+                    let px = match (p.width, p.height) {
+                        (Some(w), Some(h)) if name == "free" => (w, h),
+                        _ => nyx_plugin::manifest::desktop_size(&name).unwrap_or((336, 160)),
+                    };
+                    (false, name, px, false, None)
                 }
             }
         };
@@ -250,14 +264,12 @@ fn relayout(s: &Rc<Shared>, sc: &Rc<Screen>) {
         *t.scope.borrow_mut() = scope;
         t.available.set(available);
         t.interactive.set(interactive);
+        t.free.set(free);
+        t.grip.set_visible(editing && free.is_some());
         t.size_button.set_label(&size_label(&size_name));
         *t.size_name.borrow_mut() = size_name;
         t.size.set(size);
-        let (w, h) = ((size.0 - 2 * PADDING).max(1), (size.1 - 2 * PADDING).max(1));
-        t.clip.set_min_content_width(w);
-        t.clip.set_max_content_width(w);
-        t.clip.set_min_content_height(h);
-        t.clip.set_max_content_height(h);
+        set_clip_size(&t, size);
         t.card.remove_css_class("bare");
         if p.background == Background::None {
             t.card.add_css_class("bare");
@@ -271,6 +283,12 @@ fn relayout(s: &Rc<Shared>, sc: &Rc<Screen>) {
     }
     for t in sc.tiles.borrow().iter() {
         if !keep.iter().any(|k| Rc::ptr_eq(k, t)) {
+            if let Some((p, _)) = t.popover.borrow_mut().take() {
+                p.unparent();
+            }
+            if let Some(m) = t.menu.borrow_mut().take() {
+                m.unparent();
+            }
             sc.overlay.remove_overlay(&t.root);
         }
     }
@@ -293,6 +311,27 @@ fn update_mapped(s: &Shared, sc: &Screen) {
 
 /// The card's padding in style.css: sizes are the card's outside.
 const PADDING: i32 = 16;
+
+fn set_clip_size(t: &Tile, size: (i32, i32)) {
+    let (w, h) = ((size.0 - 2 * PADDING).max(1), (size.1 - 2 * PADDING).max(1));
+    // Shrinking: lower the maximum first, so the minimum never exceeds it.
+    t.clip.set_min_content_width(0);
+    t.clip.set_min_content_height(0);
+    t.clip.set_max_content_width(w);
+    t.clip.set_max_content_height(h);
+    t.clip.set_min_content_width(w);
+    t.clip.set_min_content_height(h);
+}
+
+/// A free size while resizing: the drag added to the size it started at, within the
+/// part's range, on the grid.
+fn resized(t: &Tile, dx: f64, dy: f64) -> (i32, i32) {
+    let ((min_w, min_h), (max_w, max_h)) = t.free.get().unwrap_or(((160, 120), (672, 504)));
+    let start = t.resize_start.get();
+    let w = geometry::snap(start.0 + dx.round() as i32).clamp(min_w, max_w);
+    let h = geometry::snap(start.1 + dy.round() as i32).clamp(min_h, max_h);
+    (w, h)
+}
 
 fn size_label(name: &str) -> String {
     let mut c = name.chars();
@@ -372,6 +411,16 @@ fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str) -> Rc<Til
     chrome.append(&remove);
     root.add_overlay(&chrome);
 
+    let grip = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    grip.add_css_class("dw-grip");
+    grip.set_halign(gtk::Align::End);
+    grip.set_valign(gtk::Align::End);
+    grip.set_size_request(22, 22);
+    grip.set_cursor_from_name(Some("se-resize"));
+    grip.set_tooltip_text(Some("Drag to resize"));
+    grip.set_visible(false);
+    root.add_overlay(&grip);
+
     let t = Rc::new(Tile {
         plugin: plugin.into(),
         part: part.into(),
@@ -390,6 +439,11 @@ fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str) -> Rc<Til
         chrome,
         size_button: size_button.clone(),
         bg_button: bg_button.clone(),
+        grip: grip.clone(),
+        free: Cell::new(None),
+        resize_start: Cell::new((0, 0)),
+        popover: RefCell::default(),
+        menu: RefCell::default(),
         rendered: RefCell::default(),
         last: RefCell::default(),
         stand_in: Cell::new(StandIn::None),
@@ -441,10 +495,36 @@ fn new_tile(s: &Rc<Shared>, sc: &Rc<Screen>, plugin: &str, part: &str) -> Rc<Til
     });
     shield.add_controller(drag);
 
+    let resize = gtk::GestureDrag::new();
+    let wt = Rc::downgrade(&t);
+    resize.connect_drag_begin(move |g, _, _| {
+        let Some(t) = wt.upgrade() else { return };
+        g.set_state(gtk::EventSequenceState::Claimed);
+        t.resize_start.set(t.size.get());
+        t.root.add_css_class("dragging");
+    });
+    let wt = Rc::downgrade(&t);
+    resize.connect_drag_update(move |_, dx, dy| {
+        let Some(t) = wt.upgrade() else { return };
+        let (w, h) = resized(&t, dx, dy);
+        set_clip_size(&t, (w, h));
+    });
+    let (ws, wt) = (Rc::downgrade(s), Rc::downgrade(&t));
+    resize.connect_drag_end(move |_, dx, dy| {
+        let (Some(s), Some(t)) = (ws.upgrade(), wt.upgrade()) else { return };
+        t.root.remove_css_class("dragging");
+        let (w, h) = resized(&t, dx, dy);
+        let (scope, key) = (t.scope.borrow().clone(), t.key());
+        if !host::edit_layout(&s, |doc| layout::set_free_size(doc, &scope, &key, w, h)) {
+            set_clip_size(&t, t.size.get());
+        }
+    });
+    grip.add_controller(resize);
+
     let (ws, wt) = (Rc::downgrade(s), Rc::downgrade(&t));
     size_button.connect_clicked(move |_| {
         let (Some(s), Some(t)) = (ws.upgrade(), wt.upgrade()) else { return };
-        let sizes = part_sizes(&s, &t.plugin, &t.part);
+        let sizes: Vec<String> = part_sizes(&s, &t.plugin, &t.part).into_iter().filter(|x| x != "free").collect();
         let current = t.size_name.borrow().clone();
         let next = sizes.iter().position(|x| *x == current).map(|i| sizes[(i + 1) % sizes.len()].clone());
         if let Some(next) = next.or_else(|| sizes.first().cloned()) {
@@ -506,25 +586,135 @@ fn part_sizes(s: &Shared, plugin: &str, part: &str) -> Vec<String> {
     discovery::discover().get(plugin).and_then(|p| from(&p.manifest)).unwrap_or_else(|| vec!["medium".into()])
 }
 
-fn on_click(s: &Rc<Shared>, sc: &Screen, t: &Tile, button: u32) {
+fn on_click(s: &Rc<Shared>, sc: &Rc<Screen>, t: &Rc<Tile>, button: u32) {
     if s.editing.get() {
         return;
     }
-    let cmd = {
+    let (cmd, item_id, has_popover, menu) = {
         let plugins = s.plugins.borrow();
         let Some(r) = plugins.get(&t.plugin) else { return };
         let Some(i) = host::item_for(r, &t.part, &sc.connector) else { return };
-        match button {
+        let cmd = match button {
             1 => i.on_click.clone(),
             2 => i.on_middle_click.clone(),
             3 => i.on_right_click.clone(),
             _ => None,
-        }
+        };
+        let key = |m: Option<String>| (i.id.clone(), m);
+        let has_popover = r.popovers.contains_key(&key(Some(sc.connector.clone()))) || r.popovers.contains_key(&key(None));
+        let menu = r.menus.get(&key(Some(sc.connector.clone()))).or_else(|| r.menus.get(&key(None))).cloned();
+        (cmd, i.id.clone(), has_popover, menu)
     };
-    match cmd {
-        Some(c) => host::run_for(s, &t.plugin, &c),
-        None => host::send_event(s, &t.plugin, &t.part, &sc.connector, EventKind::Click, Some(button), None, None),
+    if let Some(c) = cmd {
+        host::run_for(s, &t.plugin, &c);
+        return;
     }
+    if button == 1 && has_popover {
+        open_popover(s, sc, t, &item_id);
+        return;
+    }
+    if button == 3
+        && let Some(entries) = menu
+    {
+        open_menu(s, sc, t, &item_id, &entries);
+        return;
+    }
+    host::send_event(s, &t.plugin, &t.part, &sc.connector, EventKind::Click, Some(button), None, None);
+}
+
+/// Popovers and menus take the keyboard while open (a test copy's never do).
+fn keyboard_while_open(s: &Shared, sc: &Screen, open: bool) {
+    if !s.test() && !s.editing.get() {
+        sc.window.set_keyboard_mode(if open { KeyboardMode::OnDemand } else { KeyboardMode::None });
+    }
+}
+
+fn fill_popover(s: &Rc<Shared>, sc: &Rc<Screen>, t: &Rc<Tile>, item: &str) {
+    let node = {
+        let plugins = s.plugins.borrow();
+        let Some(r) = plugins.get(&t.plugin) else { return };
+        r.popovers.get(&(item.to_string(), Some(sc.connector.clone()))).or_else(|| r.popovers.get(&(item.to_string(), None))).cloned()
+    };
+    let (Some(node), Some(ctx)) = (node, tile_ctx(s, &t.plugin, item, &sc.connector)) else { return };
+    let rendered = Rc::new(view::render(&node, &ctx));
+    let scroll = gtk::ScrolledWindow::new();
+    scroll.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroll.set_propagate_natural_height(true);
+    scroll.set_propagate_natural_width(true);
+    scroll.set_max_content_height(640);
+    scroll.set_max_content_width(480);
+    scroll.set_child(Some(&rendered.root));
+    let existing = t.popover.borrow().as_ref().map(|(p, _)| p.clone());
+    let pop = existing.unwrap_or_else(|| {
+        let p = gtk::Popover::new();
+        p.add_css_class("dw-popover");
+        p.set_has_arrow(false);
+        p.set_parent(&t.card);
+        if s.test() {
+            p.set_autohide(false);
+        }
+        let (ws, wsc, pid, iid, conn) = (Rc::downgrade(s), Rc::downgrade(sc), t.plugin.clone(), t.part.clone(), sc.connector.clone());
+        p.connect_closed(move |_| {
+            let (Some(s), Some(sc)) = (ws.upgrade(), wsc.upgrade()) else { return };
+            keyboard_while_open(&s, &sc, false);
+            host::send_event(&s, &pid, &iid, &conn, EventKind::PopoverClose, None, None, None);
+        });
+        p
+    });
+    pop.set_child(Some(&scroll));
+    *t.popover.borrow_mut() = Some((pop, rendered));
+}
+
+fn open_popover(s: &Rc<Shared>, sc: &Rc<Screen>, t: &Rc<Tile>, item: &str) {
+    fill_popover(s, sc, t, item);
+    let Some((pop, _)) = t.popover.borrow().clone() else { return };
+    keyboard_while_open(s, sc, true);
+    pop.popup();
+    host::send_event(s, &t.plugin, &t.part, &sc.connector, EventKind::PopoverOpen, Some(1), None, None);
+}
+
+/// A plugin changed a popover that's open: draw it again.
+pub fn refresh_popover(s: &Rc<Shared>, plugin: &str, item: &str) {
+    for sc in s.screens.borrow().clone() {
+        for t in sc.tiles.borrow().clone().iter().filter(|t| t.plugin == plugin) {
+            let open = t.popover.borrow().as_ref().is_some_and(|(p, _)| p.is_visible());
+            if open {
+                fill_popover(s, &sc, t, item);
+            }
+        }
+    }
+}
+
+fn open_menu(s: &Rc<Shared>, sc: &Rc<Screen>, t: &Rc<Tile>, item: &str, entries: &[MenuEntry]) {
+    if let Some(old) = t.menu.borrow_mut().take() {
+        old.unparent();
+    }
+    let (ws, pid, iid, conn) = (Rc::downgrade(s), t.plugin.clone(), item.to_string(), sc.connector.clone());
+    let (model, group) = view::menu(
+        entries,
+        Rc::new(move |id: String| {
+            if let Some(s) = ws.upgrade() {
+                host::send_event(&s, &pid, &iid, &conn, EventKind::Action, None, Some(id), None);
+            }
+        }),
+    );
+    t.card.insert_action_group("pm", Some(&group));
+    let menu = gtk::PopoverMenu::from_model(Some(&model));
+    menu.add_css_class("dw-popover");
+    menu.set_has_arrow(false);
+    menu.set_parent(&t.card);
+    if s.test() {
+        menu.set_autohide(false);
+    }
+    let (ws, wsc) = (Rc::downgrade(s), Rc::downgrade(sc));
+    menu.connect_closed(move |_| {
+        if let (Some(s), Some(sc)) = (ws.upgrade(), wsc.upgrade()) {
+            keyboard_while_open(&s, &sc, false);
+        }
+    });
+    keyboard_while_open(s, sc, true);
+    menu.popup();
+    *t.menu.borrow_mut() = Some(menu);
 }
 
 // ---------- Drawing what plugins send ----------
@@ -639,6 +829,7 @@ fn show_note(s: &Shared, t: &Tile) {
 }
 
 pub fn refresh_plugin(s: &Rc<Shared>, plugin: &str) {
+    refresh_previews(s, plugin);
     let editing = s.editing.get();
     for sc in s.screens.borrow().clone() {
         for t in sc.tiles.borrow().iter().filter(|t| t.plugin == plugin) {
@@ -712,6 +903,7 @@ pub fn show_frame(s: &Shared, plugin: &str, item: &str, node: &str, bytes: &[u8]
 pub fn update_visibility(s: &Rc<Shared>) {
     let desktop = s.desktop.borrow().clone();
     let editing = s.editing.get();
+    let locked = s.locked.get();
     let mut seen: HashMap<(String, String), bool> = HashMap::new();
     for sc in s.screens.borrow().iter() {
         let Some(m) = desktop.monitor(&sc.connector) else { continue };
@@ -728,7 +920,7 @@ pub fn update_visibility(s: &Rc<Shared>) {
             let rect = t.root.compute_bounds(&sc.window).map(|b| {
                 Rect::new(b.x() as i32, b.y() as i32, b.width() as i32, b.height() as i32).translate(origin.0, origin.1)
             });
-            let covered = fullscreen || rect.is_some_and(|r| geometry::covered(&r, &windows));
+            let covered = locked || fullscreen || rect.is_some_and(|r| geometry::covered(&r, &windows));
             let v = t.shown(editing) && !covered;
             t.seen.set(v);
             let e = seen.entry((t.plugin.clone(), t.part.clone())).or_insert(false);
@@ -795,6 +987,7 @@ pub fn set_editing(s: &Rc<Shared>, on: bool) {
 fn set_tile_editing(t: &Tile, on: bool) {
     t.shield.set_visible(on);
     t.chrome.set_visible(on);
+    t.grip.set_visible(on && t.free.get().is_some());
     if on {
         t.root.add_css_class("editing");
     } else {
@@ -820,14 +1013,62 @@ fn apply_editing(s: &Rc<Shared>, sc: &Rc<Screen>) {
     set_input(s, sc);
 }
 
-/// The **Add widget** list: every turned-on desktop part not on this monitor yet, then
-/// the installed ones that aren't turned on.
+/// A widget drawn in the **Add widget** list, from the plugin's `preview` copy.
+struct Preview {
+    plugin: String,
+    part: String,
+    clip: gtk::ScrolledWindow,
+    last: RefCell<Option<Item>>,
+}
+
+thread_local! {
+    static PREVIEWS: RefCell<Vec<std::rc::Weak<Preview>>> = RefCell::default();
+}
+
+fn refresh_previews(s: &Rc<Shared>, plugin: &str) {
+    let previews: Vec<Rc<Preview>> = PREVIEWS.with(|p| {
+        let mut p = p.borrow_mut();
+        p.retain(|w| w.strong_count() > 0);
+        p.iter().filter_map(std::rc::Weak::upgrade).filter(|p| p.plugin == plugin).collect()
+    });
+    for p in previews {
+        let current = s.plugins.borrow().get(&p.plugin).and_then(|r| host::item_for(r, &p.part, host::PREVIEW));
+        let Some(current) = current else { continue };
+        if p.last.borrow().as_ref() == Some(&current) {
+            continue;
+        }
+        if !current.visible {
+            let l = gtk::Label::new(Some("Nothing to show right now"));
+            l.add_css_class("dim");
+            p.clip.set_child(Some(&l));
+            *p.last.borrow_mut() = Some(current);
+            continue;
+        }
+        let Some(ctx) = tile_ctx(s, &p.plugin, &current.id, host::PREVIEW) else { continue };
+        let node = current.view.clone().unwrap_or_else(|| view::simple(&current));
+        let r = view::render(&node, &ctx);
+        r.root.set_valign(gtk::Align::Center);
+        p.clip.set_child(Some(&r.root));
+        *p.last.borrow_mut() = Some(current);
+    }
+}
+
+/// The **Add widget** list: every turned-on desktop part not on this monitor yet, drawn
+/// live by its plugin (which runs while the list is open), then the installed ones that
+/// aren't turned on.
 fn fill_gallery(s: &Rc<Shared>, sc: &Rc<Screen>, button: &gtk::MenuButton) {
     let state = State::load();
     let on_screen: Vec<String> = sc.tiles.borrow().iter().map(|t| t.key()).collect();
-    let list = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    list.add_css_class("dw-gallery");
+    let flow = gtk::FlowBox::new();
+    flow.set_selection_mode(gtk::SelectionMode::None);
+    flow.set_max_children_per_line(2);
+    flow.set_min_children_per_line(1);
+    flow.set_column_spacing(12);
+    flow.set_row_spacing(12);
+    flow.set_valign(gtk::Align::Start);
     let mut off = vec![];
+    let mut previews = vec![];
+    let mut keep = vec![];
     let pop = gtk::Popover::new();
     for p in discovery::discover().plugins.into_iter().filter(|p| p.manifest.has_kind(Kind::Desktop)) {
         let enabled = state.enabled_parts(&p.manifest, Kind::Desktop);
@@ -841,29 +1082,63 @@ fn fill_gallery(s: &Rc<Shared>, sc: &Rc<Screen>, button: &gtk::MenuButton) {
             if on_screen.contains(&key) {
                 continue;
             }
-            let label = if part.name == p.manifest.name { part.name.clone() } else { format!("{} · {}", p.manifest.name, part.name) };
-            let row = gtk::Button::with_label(&label);
-            row.add_css_class("flat");
-            row.add_css_class("dw-gallery-row");
+            let name = if part.name == p.manifest.name { part.name.clone() } else { format!("{} · {}", p.manifest.name, part.name) };
+            let size = part.sizes().into_iter().find(|x| x != "free").unwrap_or_else(|| "medium".into());
+            let (_, px) = host::resolve_size(&p.manifest, &part.id, &Placement::new(&key));
+            let card = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            card.add_css_class("nyx-widget");
+            card.add_css_class(&view::css::plugin_class(&p.manifest.id));
+            let clip = gtk::ScrolledWindow::new();
+            clip.set_policy(gtk::PolicyType::External, gtk::PolicyType::External);
+            clip.set_propagate_natural_width(false);
+            clip.set_propagate_natural_height(false);
+            let (w, h) = ((px.0 - 2 * PADDING).max(1), (px.1 - 2 * PADDING).max(1));
+            clip.set_min_content_width(w);
+            clip.set_max_content_width(w);
+            clip.set_min_content_height(h);
+            clip.set_max_content_height(h);
+            clip.set_can_target(false);
+            let waiting = gtk::Label::new(Some("Starting…"));
+            waiting.add_css_class("dim");
+            clip.set_child(Some(&waiting));
+            card.append(&clip);
+            let add = gtk::Button::with_label(&format!("Add {name}"));
+            add.add_css_class("dw-gallery-row");
             if !part.description.is_empty() {
-                row.set_tooltip_text(Some(&part.description));
+                add.set_tooltip_text(Some(&part.description));
             }
-            let (ws, wsc, wpop) = (Rc::downgrade(s), Rc::downgrade(sc), pop.downgrade());
-            let size = part.sizes()[0].clone();
-            row.connect_clicked(move |_| {
+            let (ws, wsc, wpop, k) = (Rc::downgrade(s), Rc::downgrade(sc), pop.downgrade(), key.clone());
+            add.connect_clicked(move |_| {
                 let (Some(s), Some(sc)) = (ws.upgrade(), wsc.upgrade()) else { return };
-                add_widget(&s, &sc, &key, &size);
+                add_widget(&s, &sc, &k, &size);
                 if let Some(p) = wpop.upgrade() {
                     p.popdown();
                 }
             });
-            list.append(&row);
+            let cell = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            cell.append(&card);
+            cell.append(&add);
+            flow.insert(&cell, -1);
+            let preview = Rc::new(Preview { plugin: p.manifest.id.clone(), part: part.id.clone(), clip, last: RefCell::default() });
+            PREVIEWS.with(|v| v.borrow_mut().push(Rc::downgrade(&preview)));
+            keep.push(preview);
+            previews.push((p.manifest.id.clone(), part.id.clone()));
         }
     }
-    if list.first_child().is_none() {
+    let list = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    list.add_css_class("dw-gallery");
+    if previews.is_empty() {
         let l = gtk::Label::new(Some("Every widget that's turned on is already here."));
         l.add_css_class("dim");
         list.append(&l);
+    } else {
+        let scroll = gtk::ScrolledWindow::new();
+        scroll.set_hscrollbar_policy(gtk::PolicyType::Never);
+        scroll.set_propagate_natural_width(true);
+        scroll.set_propagate_natural_height(true);
+        scroll.set_max_content_height(560);
+        scroll.set_child(Some(&flow));
+        list.append(&scroll);
     }
     off.sort();
     off.dedup();
@@ -886,7 +1161,23 @@ fn fill_gallery(s: &Rc<Shared>, sc: &Rc<Screen>, button: &gtk::MenuButton) {
     if s.test() {
         pop.set_autohide(false);
     }
+    // The plugins behind the previews run while the list is open.
+    *s.previews.borrow_mut() = previews;
+    let ws = Rc::downgrade(s);
+    let held = RefCell::new(Some(keep));
+    pop.connect_closed(move |_| {
+        held.borrow_mut().take();
+        if let Some(s) = ws.upgrade() {
+            s.previews.borrow_mut().clear();
+            host::schedule_sync(&s);
+        }
+    });
     button.set_popover(Some(&pop));
+    host::sync_plugins(s);
+    let plugins: Vec<String> = s.previews.borrow().iter().map(|(p, _)| p.clone()).collect();
+    for p in plugins {
+        refresh_previews(s, &p);
+    }
 }
 
 /// Put a part on this monitor, top left, below what's there already.
@@ -918,6 +1209,13 @@ fn find(s: &Shared, part: &str, monitor: &str) -> Option<(Rc<Screen>, Rc<Tile>)>
     let sc = s.screens.borrow().iter().find(|sc| sc.connector == monitor || sc.stable_id == monitor).cloned()?;
     let t = sc.tiles.borrow().iter().find(|t| t.key() == part).cloned()?;
     Some((sc, t))
+}
+
+/// For tests (`TestClick`, only with `NYX_DW_DEBUG`): act as if a widget was clicked.
+pub fn test_click(s: &Rc<Shared>, part: &str, monitor: &str, button: u32) -> bool {
+    let Some((sc, t)) = find(s, part, monitor) else { return false };
+    on_click(s, &sc, &t, button);
+    true
 }
 
 pub fn move_widget(s: &Rc<Shared>, part: &str, monitor: &str, anchor: &str, offset: [i32; 2]) -> bool {
