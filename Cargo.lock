@@ -822,7 +822,7 @@ dependencies = [
 [[package]]
 name = "nyx-plugin"
 version = "0.1.0"
-source = "git+https://github.com/design-nexus/nyx-bar.git?rev=a6d951dc5155204363b3327f90b16e38e23aa524#a6d951dc5155204363b3327f90b16e38e23aa524"
+source = "git+https://github.com/design-nexus/nyx-bar.git?rev=cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4#cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4"
 dependencies = [
  "anyhow",
  "serde",
@@ -835,7 +835,7 @@ dependencies = [
 [[package]]
 name = "nyx-plugin-host"
 version = "0.1.0"
-source = "git+https://github.com/design-nexus/nyx-bar.git?rev=a6d951dc5155204363b3327f90b16e38e23aa524#a6d951dc5155204363b3327f90b16e38e23aa524"
+source = "git+https://github.com/design-nexus/nyx-bar.git?rev=cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4#cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4"
 dependencies = [
  "async-channel",
  "libc",
@@ -848,7 +848,7 @@ dependencies = [
 [[package]]
 name = "nyx-plugin-protocol"
 version = "0.1.0"
-source = "git+https://github.com/design-nexus/nyx-bar.git?rev=a6d951dc5155204363b3327f90b16e38e23aa524#a6d951dc5155204363b3327f90b16e38e23aa524"
+source = "git+https://github.com/design-nexus/nyx-bar.git?rev=cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4#cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4"
 dependencies = [
  "serde",
  "serde_json",
@@ -857,7 +857,7 @@ dependencies = [
 [[package]]
 name = "nyx-plugin-sdk"
 version = "0.1.0"
-source = "git+https://github.com/design-nexus/nyx-bar.git?rev=a6d951dc5155204363b3327f90b16e38e23aa524#a6d951dc5155204363b3327f90b16e38e23aa524"
+source = "git+https://github.com/design-nexus/nyx-bar.git?rev=cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4#cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4"
 dependencies = [
  "libc",
  "nyx-plugin-protocol",
@@ -868,7 +868,7 @@ dependencies = [
 [[package]]
 name = "nyx-plugin-view"
 version = "0.1.0"
-source = "git+https://github.com/design-nexus/nyx-bar.git?rev=a6d951dc5155204363b3327f90b16e38e23aa524#a6d951dc5155204363b3327f90b16e38e23aa524"
+source = "git+https://github.com/design-nexus/nyx-bar.git?rev=cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4#cc42d4cef2b9dd276c44fd4faa5ff4336e81a0c4"
 dependencies = [
  "gtk4",
  "nyx-plugin-protocol",

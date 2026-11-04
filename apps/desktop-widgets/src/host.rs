@@ -530,7 +530,9 @@ pub fn sync_plugins(s: &Rc<Shared>) {
         let id = p.manifest.id.clone();
         let parts = state.enabled_parts(&p.manifest, Kind::Desktop);
         let settings = layout.settings(&id, &p.manifest.settings);
-        let limits = Limits::resolve(p.trust.is_trusted(), &p.manifest.limits, layout.limits(&id));
+        let mut limits = Limits::resolve(p.trust.is_trusted(), &p.manifest.limits, layout.limits(&id));
+        // Widgets sit behind windows: 30 frames a second is plenty.
+        limits.fps = limits.fps.min(30);
         let keep = {
             let mut plugins = s.plugins.borrow_mut();
             match plugins.get_mut(&id) {
