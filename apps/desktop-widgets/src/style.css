@@ -1,0 +1,116 @@
+/* Nyx Desktop Widgets. Solid cards, no glass (Nyx Design 2.0). */
+
+window.nyx-desktop-widgets {
+  background: transparent;
+  color: @theme_text;
+}
+
+/* Edit mode: a faint 8 px grid over a dimmed desktop. */
+window.nyx-desktop-widgets.editing .dw-base {
+  background-color: alpha(@theme_bg, 0.45);
+  background-image:
+    linear-gradient(to right, alpha(@theme_text, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, alpha(@theme_text, 0.05) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+.nyx-widget {
+  background-color: @theme_card;
+  border-radius: 15px;
+  padding: 16px;
+  box-shadow: 0 6px 24px alpha(@theme_shadow, 0.25);
+}
+
+.nyx-widget.bare {
+  background: none;
+  box-shadow: none;
+  text-shadow: 0 1px 6px alpha(@theme_bg, 0.7);
+}
+
+.nyx-widget label {
+  font-feature-settings: "tnum";
+}
+
+/* Type sizes plugins may use. */
+.nyx-widget .display { font-size: 64px; font-weight: 300; letter-spacing: -1px; }
+.nyx-widget .headline { font-size: 32px; font-weight: 300; }
+.nyx-widget .title { font-size: 15px; font-weight: 600; }
+.nyx-widget .caption { font-size: 12px; }
+
+/* Classes plugins may use on items and nodes. */
+.accent { color: @theme_accent; }
+.success { color: @theme_success; }
+.warning { color: @theme_warning; }
+.danger { color: @theme_danger; }
+.dim { color: @theme_dim_text; }
+
+levelbar.plugin-progress block.filled {
+  background-color: @theme_accent;
+  border-radius: 2px;
+}
+
+levelbar.plugin-progress block.empty {
+  background-color: @track;
+  border-radius: 2px;
+}
+
+.dw-tile.editing .nyx-widget {
+  box-shadow: 0 0 0 2px alpha(@theme_accent, 0.55), 0 6px 24px alpha(@theme_shadow, 0.25);
+}
+
+.dw-tile.dragging .nyx-widget {
+  box-shadow: 0 0 0 2px @theme_accent, 0 12px 36px alpha(@theme_shadow, 0.45);
+}
+
+.dw-shield {
+  border-radius: 15px;
+}
+
+.dw-chrome button {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  background-color: alpha(@theme_popover, 0.92);
+  color: @theme_text;
+}
+
+.dw-chrome button:hover {
+  background-color: mix(@theme_popover, @theme_accent, 0.25);
+}
+
+.dw-chrome button.dw-remove:hover {
+  background-color: mix(@theme_popover, @theme_danger, 0.45);
+}
+
+.dw-toolbar {
+  padding: 8px 8px 8px 16px;
+  border-radius: 15px;
+  background-color: @theme_popover;
+  box-shadow: 0 6px 24px alpha(@theme_shadow, 0.35);
+}
+
+.dw-toolbar .dw-hint {
+  color: @theme_dim_text;
+  margin-right: 8px;
+}
+
+.dw-placeholder {
+  color: @theme_dim_text;
+}
+
+popover.dw-popover > contents {
+  background-color: @theme_popover;
+  border-radius: 15px;
+  padding: 8px;
+  min-width: 260px;
+}
+
+.dw-gallery-row {
+  padding: 6px 10px;
+  border-radius: 7px;
+}
+
+.dw-gallery-row label {
+  font-weight: normal;
+}

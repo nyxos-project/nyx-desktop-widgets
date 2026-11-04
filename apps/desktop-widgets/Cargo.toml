@@ -1,0 +1,27 @@
+[package]
+name = "nyx-desktop-widgets"
+version = "0.1.0"
+description = "Nyx Desktop Widgets: plugin widgets on the desktop, behind windows"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nyx-desktop-widgets"
+path = "src/main.rs"
+
+[dependencies]
+async-channel.workspace = true
+gtk.workspace = true
+gtk4-layer-shell.workspace = true
+nyx-desktop.workspace = true
+nyx-desktop-widgets-core = { path = "../../crates/nyx-desktop-widgets-core" }
+nyx-plugin.workspace = true
+nyx-plugin-host.workspace = true
+nyx-plugin-protocol.workspace = true
+nyx-plugin-view.workspace = true
+nyx-theme.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+toml_edit.workspace = true
