@@ -387,7 +387,8 @@ pub fn schedule_sync(s: &Rc<Shared>) {
 // ---------- Plugins ----------
 
 fn theme_info() -> ThemeInfo {
-    ThemeInfo { light: nyx_theme::palette().light, name: nyx_theme::current_theme().id }
+    let r = nyx_theme::resolved();
+    ThemeInfo { light: r.theme.palette.light, name: r.meta.id, generation: nyx_theme::engine::snapshot::generation() }
 }
 
 fn monitor_infos(s: &Shared) -> Vec<MonitorInfo> {

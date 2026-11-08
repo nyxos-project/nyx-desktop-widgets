@@ -12,14 +12,14 @@ repository = "https://github.com/nyxos-project/nyx-desktop-widgets"
 async-channel = "2"
 gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }
 gtk4-layer-shell = "0.8"
-nyx-desktop = { git = "https://github.com/design-nexus/nyx-core.git", rev = "0b511a6e338f4c2c818bad6ebd351ae406578c00" }
-nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "ff5895f73d6f486c5470217bc288b9718ea75d15" }
+nyx-desktop = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
+nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "318a2a43c294fed7c979003025dbe997a1cf9ce4" }
 # The plugin system: nyx-core, and its GTK drawing in nyx-design.
-nyx-plugin = { git = "https://github.com/design-nexus/nyx-core.git", rev = "0b511a6e338f4c2c818bad6ebd351ae406578c00" }
-nyx-plugin-host = { git = "https://github.com/design-nexus/nyx-core.git", rev = "0b511a6e338f4c2c818bad6ebd351ae406578c00" }
-nyx-plugin-sdk = { git = "https://github.com/design-nexus/nyx-core.git", rev = "0b511a6e338f4c2c818bad6ebd351ae406578c00" }
-nyx-plugin-protocol = { git = "https://github.com/design-nexus/nyx-core.git", rev = "0b511a6e338f4c2c818bad6ebd351ae406578c00" }
-nyx-plugin-view = { git = "https://github.com/design-nexus/nyx-design.git", rev = "ff5895f73d6f486c5470217bc288b9718ea75d15" }
+nyx-plugin = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
+nyx-plugin-host = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
+nyx-plugin-sdk = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
+nyx-plugin-protocol = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
+nyx-plugin-view = { git = "https://github.com/design-nexus/nyx-design.git", rev = "318a2a43c294fed7c979003025dbe997a1cf9ce4" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1"

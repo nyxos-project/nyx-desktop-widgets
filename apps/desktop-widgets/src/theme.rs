@@ -5,6 +5,7 @@ use nyx_theme::{Style, ThemeMode, ThemePrefs};
 
 pub fn install() {
     nyx_theme::use_design_2();
+    nyx_theme::use_shell_scope();
     nyx_theme::install(Style {
         window_class: "nyx-desktop-widgets",
         base_skip: &[],
