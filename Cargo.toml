@@ -13,13 +13,13 @@ async-channel = "2"
 gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }
 gtk4-layer-shell = "0.8"
 nyx-desktop = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
-nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "318a2a43c294fed7c979003025dbe997a1cf9ce4" }
+nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "40db521bab468d54f18f65c6aabd7fc8533d6a4d" }
 # The plugin system: nyx-core, and its GTK drawing in nyx-design.
 nyx-plugin = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
 nyx-plugin-host = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
 nyx-plugin-sdk = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
 nyx-plugin-protocol = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }
-nyx-plugin-view = { git = "https://github.com/design-nexus/nyx-design.git", rev = "318a2a43c294fed7c979003025dbe997a1cf9ce4" }
+nyx-plugin-view = { git = "https://github.com/design-nexus/nyx-design.git", rev = "40db521bab468d54f18f65c6aabd7fc8533d6a4d" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1"
