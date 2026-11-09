@@ -66,9 +66,11 @@ pin moves a widget between the two. A monitor's own entry for a part replaces th
 | Path | What |
 | --- | --- |
 | `crates/nyx-desktop-widgets-core` | The layout file and the placement maths, without GTK |
-| `apps/desktop-widgets` | The host |
+| `apps/desktop-widgets` | The GTK host |
+| `apps/desktop-widgets-backend` | The host without GTK, for the Quickshell interface: plugins, layout, placement, visibility, `DesktopWidgets1` |
+| `qml/DesktopWidgets` | The Quickshell interface (a Nyx Shell component): the surfaces, edit mode, **Add widget** |
 | `plugins/upnext` | Up next: the coming events from Nyx Calendar |
-| `data/nyx-desktop-widgets.service` | The user unit |
+| `data/` | The user units: the GTK host, or the backend with Nyx Shell's `nyx-shell-qs` |
 | `nix/` | The NyxOS package and how to wire it up |
 | `docs/PLAN.md` | The plan, what's built and what isn't |
 
@@ -87,6 +89,20 @@ keyboard, e.g. on a headless output:
 ```sh
 cargo run -p nyx-desktop-widgets -- --only HEADLESS-2
 ```
+
+The Quickshell interface the same way: a test backend for one output on its own
+socket, and `qml/DesktopWidgets` loaded in `qs` with the Nyx QML modules (nyx-shell's
+and nyx-design's `qml` folders on `QML_IMPORT_PATH`):
+
+```sh
+NYX_DW_ONLY=HEADLESS-2 NYX_DESKTOP_WIDGETS_UI_SOCKET=/tmp/dw.sock cargo run -p nyx-desktop-widgets-backend
+NYX_DESKTOP_WIDGETS_UI_SOCKET=/tmp/dw.sock NYX_SHELL_SCREEN=HEADLESS-2 NYX_SHELL_NO_KEYBOARD=1 qs -p shell.qml
+```
+
+where `shell.qml` is `ShellRoot { DesktopWidgets.Main {} }` importing that folder. The
+test copy owns `io.github.design_nexus.nyx.DesktopWidgets.Test` (so `Edit` and the
+`Test…` methods reach it) and doesn't write the theme snapshot. Plugin CSS and `frame`
+nodes aren't drawn by the Quickshell interface yet.
 
 ## License
 

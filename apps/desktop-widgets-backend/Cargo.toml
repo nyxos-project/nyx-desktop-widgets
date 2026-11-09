@@ -1,0 +1,27 @@
+[package]
+name = "nyx-desktop-widgets-backend"
+version = "0.1.0"
+description = "Nyx Desktop Widgets without GTK: plugins, layout, placement and visibility, for its Quickshell interface"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nyx-desktop-widgets-backend"
+path = "src/main.rs"
+
+[dependencies]
+async-channel.workspace = true
+gio = "0.22"
+glib = "0.22"
+nyx-desktop.workspace = true
+nyx-desktop-widgets-core = { path = "../../crates/nyx-desktop-widgets-core" }
+nyx-plugin.workspace = true
+nyx-plugin-host.workspace = true
+nyx-plugin-protocol.workspace = true
+nyx-theme-core = { git = "https://github.com/design-nexus/nyx-design.git", rev = "40db521bab468d54f18f65c6aabd7fc8533d6a4d" }
+nyx-ui-link = { git = "https://github.com/design-nexus/nyx-core.git", rev = "afae3bb8dceba28026a83f24a14e51b47c726dfe" }
+serde_json.workspace = true
+toml.workspace = true
+toml_edit.workspace = true

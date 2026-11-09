@@ -10,6 +10,12 @@ the hourly forecast (older ones show current conditions only). Up next
 
 ## nyx-packages
 
+NyxOS runs the Quickshell interface (Nyx Shell handoff 03): the package starts
+`nyx-desktop-widgets-backend` with the session and puts `qml/DesktopWidgets` in
+`share/nyx-shell/components/nyx-desktop-widgets`, which `nyx-shell-qs` (the nyx-shell
+package) loads. The GTK host's unit is installed but not started; it and the backend
+both own `io.github.design_nexus.nyx.DesktopWidgets`, so only one runs.
+
 1. `flake.nix` inputs: `nyx-desktop-widgets = { url = "github:nyxos-project/nyx-desktop-widgets"; flake = false; };`
 2. Copy [nyx-desktop-widgets.nix](nyx-desktop-widgets.nix) to
    `pkgs/nyx-desktop-widgets.nix` and add `"nyx-desktop-widgets"` to the `fromSource`

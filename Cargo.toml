@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/nyx-desktop-widgets-core", "apps/desktop-widgets", "plugins/upnext"]
+members = ["crates/nyx-desktop-widgets-core", "apps/desktop-widgets", "apps/desktop-widgets-backend", "plugins/upnext"]
 
 [workspace.package]
 edition = "2024"
