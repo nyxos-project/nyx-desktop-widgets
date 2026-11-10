@@ -73,13 +73,18 @@ pub fn rebuild(s: &Rc<Shared>) {
     update_visibility(s);
 }
 
-/// The monitor's active workspace: its id and its name.
+/// The monitor's active workspace: its id, its name, and the number the user knows it
+/// by on this monitor (a second screen's 13 under Omarchy is its "3", as is a
+/// virtual monitor's 203), so `workspace."3"` means the third workspace of every screen.
 pub fn active_workspace(s: &Shared, connector: &str) -> Vec<String> {
     let desktop = s.desktop.borrow();
     let Some(m) = desktop.monitor(connector) else { return vec![] };
     let mut keys = vec![m.active_workspace.to_string()];
     if let Some(w) = desktop.workspaces.iter().find(|w| w.id == m.active_workspace) {
         keys.push(w.name.clone());
+        if let Some(n) = desktop.workspace_number(w).map(|n| n.to_string()).filter(|n| !keys.contains(n)) {
+            keys.push(n);
+        }
     }
     keys
 }

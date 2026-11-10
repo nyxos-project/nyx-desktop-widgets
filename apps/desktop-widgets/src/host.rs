@@ -415,7 +415,7 @@ fn desktop_state(d: &Desktop) -> DesktopState {
         workspaces: d
             .workspaces
             .iter()
-            .filter(|w| w.is_user())
+            .filter(|w| d.workspace_number(w).is_some())
             .map(|w| DesktopWorkspace {
                 id: w.id,
                 name: w.name.clone(),

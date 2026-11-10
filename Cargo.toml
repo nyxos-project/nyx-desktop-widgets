@@ -12,7 +12,7 @@ repository = "https://github.com/nyxos-project/nyx-desktop-widgets"
 async-channel = "2"
 gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }
 gtk4-layer-shell = "0.8"
-nyx-desktop = { git = "https://github.com/design-nexus/nyx-core.git", rev = "04c93f7670075f5b4cf8150fcafe3f485b6dc693" }
+nyx-desktop = { git = "https://github.com/design-nexus/nyx-core.git", rev = "c6590d4194f8f5857e23fcf1b52ca171a2202c92" }
 nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "40db521bab468d54f18f65c6aabd7fc8533d6a4d" }
 # The plugin system: nyx-core, and its GTK drawing in nyx-design.
 nyx-plugin = { git = "https://github.com/design-nexus/nyx-core.git", rev = "4378e243aeb09733843996663cd9a5a7f0cbb821" }

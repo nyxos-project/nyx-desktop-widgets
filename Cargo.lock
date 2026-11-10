@@ -992,7 +992,7 @@ dependencies = [
 [[package]]
 name = "nyx-desktop"
 version = "0.1.0"
-source = "git+https://github.com/design-nexus/nyx-core.git?rev=04c93f7670075f5b4cf8150fcafe3f485b6dc693#04c93f7670075f5b4cf8150fcafe3f485b6dc693"
+source = "git+https://github.com/design-nexus/nyx-core.git?rev=c6590d4194f8f5857e23fcf1b52ca171a2202c92#c6590d4194f8f5857e23fcf1b52ca171a2202c92"
 dependencies = [
  "anyhow",
  "async-channel",
