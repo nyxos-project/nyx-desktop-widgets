@@ -41,7 +41,7 @@ Item {
     Connections {
         target: t.surface.client
         function onEvent(ev, body) {
-            if (ev === "Patch" && t.item && body.plugin === t.tile.plugin && body.item === t.item.id && (!body.monitor || body.monitor === t.surface.connector))
+            if (ev === "NodePatch" && t.item && body.plugin === t.tile.plugin && body.item === t.item.id && (!body.monitor || body.monitor === t.surface.connector))
                 view.patch(body.nodes);
         }
     }

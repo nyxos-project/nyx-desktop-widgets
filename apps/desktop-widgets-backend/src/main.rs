@@ -9,7 +9,7 @@
 //! - topic `widgets`: `{editing, screens: [{connector, area, tiles: […]}], gallery,
 //!   popover}`; each tile's `item.view` is its plugin's tree with paths resolved, and
 //!   `item.rev` goes up only when the plugin sends it again;
-//! - event `Patch` (`{plugin, item, monitor, nodes}`): a plugin's patch, applied to the
+//! - event `NodePatch` (`{plugin, item, monitor, nodes}`): a plugin's patch, applied to the
 //!   view on screen;
 //! - operations: `Click`, `ViewEvent`, `MenuAction`, `PopoverClosed`, `Edit`, `Move`,
 //!   `ResizeFree`, `CycleSize`, `ToggleBackground`, `ToggleWorkspace`, `Remove`,

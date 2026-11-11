@@ -169,7 +169,7 @@ PanelWindow {
         Connections {
             target: w.client
             function onEvent(ev, body) {
-                if (ev === "Patch" && w.popover && body.plugin === w.popover.plugin && body.item === w.popover.item)
+                if (ev === "NodePatch" && w.popover && body.plugin === w.popover.plugin && body.item === w.popover.item)
                     popView.patch(body.nodes);
             }
         }

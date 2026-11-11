@@ -3,7 +3,7 @@
 //! connected monitor (and, for third-party plugins, their permissions are approved),
 //! restarted when their folder, manifest, parts or limits change. Each is told where its
 //! widgets are and whether they can be seen. What they show goes to the interface
-//! (`screens.rs`); their patches go on as `Patch` events.
+//! (`screens.rs`); their patches go on as `NodePatch` events (not `Patch`, the link's own event).
 
 use crate::screens;
 use gio::prelude::*;
@@ -795,7 +795,7 @@ fn on_message(s: &Rc<Shared>, id: &str, msg: PluginMsg) {
                 }
             }
             let nodes = serde_json::to_value(&p.nodes).unwrap_or(Value::Null);
-            s.link.emit("Patch", json!({"plugin": id, "item": p.item, "monitor": p.monitor, "nodes": nodes}));
+            s.link.emit("NodePatch", json!({"plugin": id, "item": p.item, "monitor": p.monitor, "nodes": nodes}));
         }
         PluginMsg::Remove { item, monitor } => {
             if let Some(r) = s.plugins.borrow_mut().get_mut(id) {
