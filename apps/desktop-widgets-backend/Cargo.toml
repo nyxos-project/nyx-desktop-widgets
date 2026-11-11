@@ -20,8 +20,8 @@ nyx-desktop-widgets-core = { path = "../../crates/nyx-desktop-widgets-core" }
 nyx-plugin.workspace = true
 nyx-plugin-host.workspace = true
 nyx-plugin-protocol.workspace = true
-nyx-theme-core = { git = "https://github.com/design-nexus/nyx-design.git", rev = "40db521bab468d54f18f65c6aabd7fc8533d6a4d" }
-nyx-ui-link = { git = "https://github.com/design-nexus/nyx-core.git", rev = "afae3bb8dceba28026a83f24a14e51b47c726dfe" }
+nyx-theme-core = { git = "https://github.com/design-nexus/nyx-design.git", rev = "553f65567057150af4929033896531879528bbf4" }
+nyx-ui-link = { git = "https://github.com/design-nexus/nyx-core.git", rev = "166ff17bdb09dd6c5f130fd28ecf81d1f8a59d2d" }
 serde_json.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
